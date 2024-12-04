@@ -31,7 +31,7 @@ defmodule YoloFastNMS.MixProject do
     [
       {:rustler, ">= 0.29.0", runtime: false},
       {:nx, "~> 0.9.1", optional: true},
-      {:ex_doc, "~> 0.35", only: :docs}
+      {:ex_doc, "~> 0.35", only: :dev, runtime: false}
     ]
   end
 
