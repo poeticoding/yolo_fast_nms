@@ -43,7 +43,8 @@ defmodule YoloFastNMS.MixProject do
     [
       maintainers: ["Alvise Susmel"],
       licenses: ["Apache-2.0"],
-      links: %{"GitHub" => @source_url}
+      links: %{"GitHub" => @source_url},
+      files: ~w(lib  mix.exs README.md LICENSE native)
     ]
   end
 
