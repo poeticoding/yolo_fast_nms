@@ -2,4 +2,3 @@
 _build/
 deps/
 priv/native/
-native/yolofastnms/.cargo

@@ -30,4 +30,3 @@ yolo_fast_nms-*.tar
 /priv/native/*.so
 
 .target/
-.cargo/
