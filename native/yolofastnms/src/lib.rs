@@ -3,11 +3,6 @@ use rustler::{Binary, Env, Term, NifResult, Encoder};
 use std::collections::HashSet;
 use std::convert::TryInto;
 
-//in the given binary
-const COLUMNS: usize = 8400;
-const ROWS: usize = 84;
-const ROW_SIZE: usize = COLUMNS * std::mem::size_of::<f32>();
-
 #[derive(Debug, Clone)]
 struct BBox {
     prob: f32,
@@ -19,19 +14,31 @@ struct BBox {
 }
 
 #[rustler::nif]
-fn run_with_binary<'a>(env: Env<'a>, binary: Binary, prob_threshold: f32, iou_threshold: f32) -> NifResult<Term<'a>> {
-    if binary.len() < ROW_SIZE {
-        return Err(rustler::Error::BadArg);
-    }
-
+fn run_with_binary<'a>(
+    env: Env<'a>, 
+    binary: Binary, 
+    prob_threshold: f32,
+    iou_threshold: f32,
+    rows: usize,
+    columns: usize,
+    transpose: bool
+) -> NifResult<Term<'a>> {
+    
     // load the matrix `Vec<Vec<f32>>` from binary.
-    // transpose {84, 8400} to {8400, 84}
-    let matrix = transpose_matrix(&binary_to_matrix(&binary, ROW_SIZE));
+    let matrix = binary_to_matrix(&binary, rows, columns);
 
+    // transpose {rows, columns} to {columns, rows} if needed
+    let matrix = if transpose {
+        transpose_matrix(&matrix)
+    } else {
+        matrix
+    };
+    
     let bboxes = matrix_to_bboxes(&matrix);
+    
     //keep only the bboxes with prob > prob_threshold
     let filtered_bboxes = bboxes.into_iter().filter(|b| b.prob >= prob_threshold).collect();
-    
+
     //run NMS
     let final_bboxes = nms(&filtered_bboxes, iou_threshold);
 
@@ -51,16 +58,21 @@ fn run_with_binary<'a>(env: Env<'a>, binary: Binary, prob_threshold: f32, iou_th
 }
 
 // tensor binary to a vector of vectors, each row of `row_size` bytes.
-fn binary_to_matrix(binary: &Binary, row_size: usize) -> Vec<Vec<f32>> {
+fn binary_to_matrix(binary: &Binary, rows: usize, columns: usize) -> Vec<Vec<f32>> {
     // Ensure the binary length is divisible by the row size
-    assert!(binary.len() % row_size == 0, "Binary size is not a multiple of the row size");
-
+    let f32size = std::mem::size_of::<f32>();
+    let row_size = (columns * f32size).try_into().unwrap();
+    let total_size = rows * row_size;
+    assert!(binary.len() == total_size, "Binary size ({}) is less than the total size ({})", binary.len(), total_size);
+    assert!(binary.len() >= row_size, "Binary size ({}) is less than the row size ({})", binary.len(), row_size);
+    assert!(binary.len() % row_size == 0, "Binary size ({}) is not a multiple of the row size ({})", binary.len(), row_size);
+    
     binary
         .as_slice()
         .chunks(row_size)
         .map(|chunk| {
             chunk
-                .chunks(4) // Each f32 is 4 bytes
+                .chunks(f32size)
                 .map(|bytes| f32::from_ne_bytes(bytes.try_into().unwrap()))
                 .collect::<Vec<f32>>()
         })
@@ -75,8 +87,6 @@ fn matrix_to_bboxes(matrix: &Vec<Vec<f32>>) -> Vec<BBox> {
 }
 
 fn bbox_from_row(row: &Vec<f32>) -> BBox {    
-    assert!(row.len() == ROWS);
-
     let cx = row[0].round() as i32;
     let cy = row[1].round() as i32;
     let w = row[2].round() as i32;
